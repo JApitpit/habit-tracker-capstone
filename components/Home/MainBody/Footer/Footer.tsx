@@ -3,14 +3,26 @@ import { View, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../../../styles/globalStyles';
 
-export default function FooterNav() {
+type FooterNavProps = {
+  onAddPress: () => void;
+};
+
+export default function FooterNav({ onAddPress }: FooterNavProps) {
   return (
     <View style={styles.container}>
       <Pressable style={styles.sideButton}>
         <Ionicons name="sparkles" size={30} color={COLORS.sunshineYellow} />
       </Pressable>
 
-      <Pressable style={styles.centerButton}>
+      <Pressable
+        onPress={onAddPress}
+        style={({ pressed }) => [
+          styles.centerButton,
+          {
+            transform: [{ scale: pressed ? 0.9 : 1 }],
+          },
+        ]}
+      >
         <Ionicons name="add" size={37} color={COLORS.deepMidnightBlue} />
       </Pressable>
 
@@ -31,11 +43,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingHorizontal: 24,
-    zIndex: 999,         
-    backgroundColor: '#0f122d',  
-    height: 125,  
+    zIndex: 999,
+    backgroundColor: '#0f122d',
+    height: 125,
     paddingLeft: 32,
-    paddingRight: 32, 
+    paddingRight: 32,
   },
 
   sideButton: {

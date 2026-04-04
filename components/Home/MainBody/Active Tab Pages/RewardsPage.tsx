@@ -40,7 +40,7 @@ export default function RewardsPage() {
 
 const styles = StyleSheet.create({
   page: {
-    paddingBottom: 120,
+    paddingBottom: 50,
   },
   panel: {
     backgroundColor: COLORS.vividOrange,
