@@ -21,8 +21,6 @@ export type RecommendationHabit = {
   reminderTime?: string;
   notificationId?: string | null;
 
-  completedCount: number;
-  missedCount: number;
   reason: string;
 };
 
@@ -74,18 +72,6 @@ export default function RecommendationPrompt({
               </Text>
             </View>
 
-            <View style={styles.statsRow}>
-              <View style={styles.statBox}>
-                <Text style={styles.statNumber}>{habit.completedCount}</Text>
-                <Text style={styles.statLabel}>Completed</Text>
-              </View>
-
-              <View style={styles.statBox}>
-                <Text style={styles.statNumber}>{habit.missedCount}</Text>
-                <Text style={styles.statLabel}>Missed</Text>
-              </View>
-            </View>
-
             <View style={styles.card}>
               <Text style={styles.label}>Progress</Text>
               <Text style={styles.text}>
@@ -104,7 +90,7 @@ export default function RecommendationPrompt({
               </Text>
               <Text style={styles.placeholderText}>
                 {
-                  "Personalized recommendations will appear here later.\n\nFormat should be:\n\n- Increase/Decrease target count: 12312312 \n\n- Change 6:00 PM to 8:00 PM"
+                  "Personalized recommendations will appear here later.\n\nFormat should be:\n\n- Increase/Decrease target count: 12312312\n\n- Change 6:00 PM to 8:00 PM"
                 }
               </Text>
             </View>
@@ -189,31 +175,6 @@ const styles = StyleSheet.create({
   text: {
     color: '#fff',
     fontSize: 14,
-  },
-
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-  },
-
-  statBox: {
-    flex: 1,
-    backgroundColor: '#20264d',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-  },
-
-  statNumber: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '800',
-  },
-
-  statLabel: {
-    color: '#bbb',
-    fontSize: 12,
   },
 
   placeholder: {

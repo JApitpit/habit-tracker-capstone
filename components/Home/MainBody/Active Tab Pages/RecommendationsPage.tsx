@@ -79,13 +79,7 @@ export default function RecommendationsPage({
                   </Text>
                 </View>
               </View>
-
-              <View style={styles.rightSide}>
-                <View style={styles.countBadge}>
-                  <Text style={styles.countBadgeText}>{habit.missedCount}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#fff" />
-              </View>
+              
             </Pressable>
           ))
         )}

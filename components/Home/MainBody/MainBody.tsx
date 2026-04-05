@@ -152,7 +152,11 @@ export default function MainBody() {
         visible={recommendationPromptVisible}
         habit={selectedRecommendationHabit}
         onClose={closeRecommendationPrompt}
-      />
+        onReject={closeRecommendationPrompt}
+        onAccept={(habit) => {
+         closeRecommendationPrompt();
+  }}
+/>
     </View>
   );
 }
