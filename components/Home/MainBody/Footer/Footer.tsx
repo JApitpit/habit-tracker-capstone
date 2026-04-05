@@ -1,17 +1,30 @@
 import React from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../../../styles/globalStyles';
 
 type FooterNavProps = {
   onAddPress: () => void;
+  onRecommendationsPress: () => void;
+  recommendationCount: number;
 };
 
-export default function FooterNav({ onAddPress }: FooterNavProps) {
+export default function FooterNav({
+  onAddPress,
+  onRecommendationsPress,
+  recommendationCount,
+}: FooterNavProps) {
   return (
     <View style={styles.container}>
-      <Pressable style={styles.sideButton}>
+      <Pressable style={styles.sideButton} onPress={onRecommendationsPress}>
         <Ionicons name="sparkles" size={30} color={COLORS.sunshineYellow} />
+        {recommendationCount > 0 && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {recommendationCount > 9 ? '9+' : recommendationCount}
+            </Text>
+          </View>
+        )}
       </Pressable>
 
       <Pressable
@@ -55,6 +68,7 @@ const styles = StyleSheet.create({
     height: 58,
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
 
   centerButton: {
@@ -64,5 +78,26 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.sunshineYellow,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 2,
+    backgroundColor: '#ff453a',
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    borderWidth: 2,
+    borderColor: '#0f122d',
+  },
+
+  badgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
   },
 });

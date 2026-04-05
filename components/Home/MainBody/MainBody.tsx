@@ -7,8 +7,10 @@ import HabitsPage from './Active Tab Pages/HabitsPage';
 import DailiesPage from './Active Tab Pages/DailiesPage';
 import TodosPage from './Active Tab Pages/TodosPage';
 import RewardsPage from './Active Tab Pages/RewardsPage';
+import RecommendationsPage from './Active Tab Pages/RecommendationsPage';
 import FooterNav from './Footer/Footer';
 import CreateHabitSheet from './CreateHabitSheet';
+import RecommendationPrompt, { RecommendationHabit } from './RecommendationPrompt';
 
 export type Habit = {
   id: string;
@@ -62,8 +64,35 @@ export default function MainBody() {
     },
   ]);
 
+  const [selectedRecommendationHabit, setSelectedRecommendationHabit] =
+    useState<RecommendationHabit | null>(null);
+  const [recommendationPromptVisible, setRecommendationPromptVisible] =
+    useState(false);
+
   const handleCreateHabit = (newHabit: Habit) => {
     setHabits((prev) => [...prev, newHabit]);
+  };
+
+  const habitsNeedingRecommendation: RecommendationHabit[] = habits
+    .filter((habit) => habit.currentCount < habit.targetCount)
+    .map((habit) => ({
+      ...habit,
+      completedCount: habit.currentCount,
+      missedCount: Math.max(habit.targetCount - habit.currentCount, 0),
+      reason:
+        habit.currentCount === 0
+          ? 'This habit has not been completed yet.'
+          : 'This habit is still behind its target and may need support.',
+    }));
+
+  const openRecommendationPrompt = (habit: RecommendationHabit) => {
+    setSelectedRecommendationHabit(habit);
+    setRecommendationPromptVisible(true);
+  };
+
+  const closeRecommendationPrompt = () => {
+    setRecommendationPromptVisible(false);
+    setSelectedRecommendationHabit(null);
   };
 
   const renderActivePage = () => {
@@ -76,6 +105,14 @@ export default function MainBody() {
         return <TodosPage />;
       case 'Rewards':
         return <RewardsPage />;
+      case 'Recommendations':
+     return (
+        <RecommendationsPage
+          habits={habitsNeedingRecommendation}
+          onHabitPress={openRecommendationPrompt}
+          onExitPress={() => setActiveTab('Dailies')}
+        />
+           );
       default:
         return <DailiesPage />;
     }
@@ -92,15 +129,29 @@ export default function MainBody() {
   return (
     <View style={styles.container}>
       <ReminderBar />
-      <Tabs activeTab={activeTab} onTabPress={setActiveTab} />
+
+      {activeTab !== 'Recommendations' && (
+        <Tabs activeTab={activeTab} onTabPress={setActiveTab} />
+      )}
+
       <View style={styles.pageContainer}>{renderActivePage()}</View>
 
-      <FooterNav onAddPress={openHabitSheet} />
+      <FooterNav
+        onAddPress={openHabitSheet}
+        onRecommendationsPress={() => setActiveTab('Recommendations')}
+        recommendationCount={habitsNeedingRecommendation.length}
+      />
 
       <CreateHabitSheet
         ref={bottomSheetRef}
         onClose={closeHabitSheet}
         onCreateHabit={handleCreateHabit}
+      />
+
+      <RecommendationPrompt
+        visible={recommendationPromptVisible}
+        habit={selectedRecommendationHabit}
+        onClose={closeRecommendationPrompt}
       />
     </View>
   );
