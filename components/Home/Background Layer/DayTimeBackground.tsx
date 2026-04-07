@@ -30,7 +30,6 @@ const styles = StyleSheet.create({
     bottom: 100,
   },
 
-  // ☀️ Sun
   sun: {
     position: 'absolute',
     top: 70,
@@ -41,7 +40,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFD93D',
   },
 
-  // ☁️ Clouds (base shape)
   cloud: {
     position: 'absolute',
     backgroundColor: 'white',
