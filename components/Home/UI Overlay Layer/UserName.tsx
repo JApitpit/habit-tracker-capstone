@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth, db } from '../../../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { COLORS } from '../../../styles/globalStyles';
 
 export default function UserName() {
@@ -9,16 +10,22 @@ export default function UserName() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const savedUserString = await AsyncStorage.getItem('user');
+        const user = auth.currentUser;
 
-        if (savedUserString) {
-          const savedUser = JSON.parse(savedUserString);
-
-          if (savedUser.username) {
-            setUsername(savedUser.username);
-          }
+        if (!user) {
+          return;
         }
-      } catch (error) {
+        const docRef = doc(db, "users", user.uid);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setUsername(data.username || 'User Name');
+        } else {
+          console.log('No such document!');
+        }
+      } 
+      catch (error) {
         console.log('Failed to load username:', error);
       }
     };

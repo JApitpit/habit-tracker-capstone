@@ -8,8 +8,10 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, globalStyles } from '../../styles/globalStyles';
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "../../firebase";
+import { doc, setDoc } from 'firebase/firestore';
 
 type Props = {
   onGoToLogin: () => void;
@@ -54,18 +56,27 @@ export default function SignUpScreen({ onGoToLogin }: Props) {
     }
 
     try {
-      const user = {
+
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const uid = userCredential.user.uid;
+
+      //save extra data to Firebase
+      await setDoc(doc(db, "users", uid), {
         username: username.trim(),
         email: email.trim().toLowerCase(),
-        password,
-      };
-
-      await AsyncStorage.setItem('user', JSON.stringify(user));
-
+        createdAt: new Date(),
+      });
+    
       Alert.alert('Success', 'Account created! Please log in.');
       onGoToLogin();
-    } catch (error) {
-      Alert.alert('Error', 'Could not save account.');
+    } catch (error: any) {
+      if (error.code == 'auth/email-already-in-use') {
+        Alert.alert('This email is already in use. Please log in or use a different email.');
+        return;
+      }
+      console.log('Signup error code:', error.code);
+      console.log('Signup error message:', error.message);
+      Alert.alert('Error', error.message || 'Something went wrong while signing up.');
     }
   };
 

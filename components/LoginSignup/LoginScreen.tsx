@@ -8,7 +8,8 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../../firebase';
 import { COLORS, globalStyles } from '../../styles/globalStyles';
 
 type Props = {
@@ -24,22 +25,20 @@ export default function LoginScreen({
   const [password, setPassword] = useState('');
 
   const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Missing fields', 'Please fill in all fields.');
+      return;
+    }
+
     try {
-      const savedUserString = await AsyncStorage.getItem('user');
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      onLoginSuccess();
 
-      if (!savedUserString) {
-        Alert.alert('No account found', 'Please sign up first.');
-        return;
+    } catch (error: any) {
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        Alert.alert('Login Failed', 'Invalid email or password.');
       }
-
-      const savedUser = JSON.parse(savedUserString);
-
-      if (email.trim() === savedUser.email && password === savedUser.password) {
-        onLoginSuccess();
-      } else {
-        Alert.alert('Login failed', 'Incorrect email or password.');
-      }
-    } catch (error) {
+      console.log('Login error:', error.message);
       Alert.alert('Error', 'Something went wrong while logging in.');
     }
   };
