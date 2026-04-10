@@ -7,7 +7,6 @@ export default function ProgressBars() {
   return (
     <View style={styles.container}>
 
-      {/* TOP BAR + HEART */}
       <View style={styles.row}>
         <View style={styles.barBackground}>
           <View style={[styles.topBarFill, { width: '78%' }]} />
@@ -15,7 +14,6 @@ export default function ProgressBars() {
         <Ionicons name="heart" size={14} color={COLORS.vividOrange} />
       </View>
 
-      {/* BOTTOM BAR + STAR */}
       <View style={styles.row}>
         <View style={styles.barBackground}>
           <View style={[styles.bottomBarFill, { width: '55%' }]} />

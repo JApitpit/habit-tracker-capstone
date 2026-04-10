@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onAuthStateChanged } from 'firebase/auth';
 
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './components/LoginSignup/LoginScreen';
 import SignUpScreen from './components/LoginSignup/SignUpScreen';
+import { auth } from './firebase';
 
 type Screen = 'login' | 'signup' | 'home';
 
@@ -13,13 +14,12 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const resetForTesting = async () => {
-      await AsyncStorage.removeItem('user');
-      setScreen('login');
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setScreen(user ? 'home' : 'login');
       setLoading(false);
-    };
+    });
 
-    resetForTesting();
+    return unsubscribe;
   }, []);
 
   if (loading) return null;
@@ -34,10 +34,7 @@ export default function App() {
       )}
 
       {screen === 'signup' && (
-        <SignUpScreen
-          onGoToLogin={() => setScreen('login')}
-          onSignupSuccess={() => setScreen('home')}
-        />
+        <SignUpScreen onGoToLogin={() => setScreen('login')} />
       )}
 
       {screen === 'home' && <HomeScreen />}

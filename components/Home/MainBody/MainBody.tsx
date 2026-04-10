@@ -1,6 +1,7 @@
-import React, { useRef, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import BottomSheet from '@gorhom/bottom-sheet';
+
 import ReminderBar from './ReminderBar';
 import Tabs from './Tabs';
 import HabitsPage from './Active Tab Pages/HabitsPage';
@@ -12,78 +13,59 @@ import FooterNav from './Footer/Footer';
 import CreateHabitSheet from './CreateHabitSheet';
 import RecommendationPrompt, { RecommendationHabit } from './RecommendationPrompt';
 
-export type Habit = {
-  id: string;
-  title: string;
-  subtitle?: string;
-  currentCount: number;
-  targetCount: number;
-  repetition: 'Daily' | 'Weekly' | 'One Time';
-  reminderEnabled: boolean;
-  reminderTime?: string;
-  notificationId?: string | null;
-};
+import { useHabits } from '../../../Backend/hooks/useHabits';
+import { createHabit } from '../../../Backend/services/habitService';
+import type { HabitDoc } from '../../../Backend/types/tasks';
+import { COLORS } from '../../../styles/globalStyles';
+
+export type Habit = HabitDoc;
 
 export default function MainBody() {
   const [activeTab, setActiveTab] = useState('Dailies');
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  const [habits, setHabits] = useState<Habit[]>([
-    {
-      id: '1',
-      title: 'Drink Water',
-      subtitle: 'Stay hydrated',
-      currentCount: 2,
-      targetCount: 5,
-      repetition: 'Daily',
-      reminderEnabled: true,
-      reminderTime: new Date().toISOString(),
-      notificationId: null,
-    },
-    {
-      id: '2',
-      title: 'Workout',
-      subtitle: 'Quick exercise',
-      currentCount: 1,
-      targetCount: 1,
-      repetition: 'Daily',
-      reminderEnabled: false,
-      reminderTime: '',
-      notificationId: null,
-    },
-    {
-      id: '3',
-      title: 'Read',
-      subtitle: '10 pages',
-      currentCount: 3,
-      targetCount: 10,
-      repetition: 'Weekly',
-      reminderEnabled: false,
-      reminderTime: '',
-      notificationId: null,
-    },
-  ]);
+  const { habits, loading, error } = useHabits();
 
   const [selectedRecommendationHabit, setSelectedRecommendationHabit] =
     useState<RecommendationHabit | null>(null);
   const [recommendationPromptVisible, setRecommendationPromptVisible] =
     useState(false);
 
-  const handleCreateHabit = (newHabit: Habit) => {
-    setHabits((prev) => [...prev, newHabit]);
-  };
+  const habitsNeedingRecommendation: RecommendationHabit[] = useMemo(
+    () =>
+      habits
+        .filter((habit) => habit.currentCount < habit.targetCount)
+        .map((habit) => ({
+          ...habit,
+          reason:
+            habit.currentCount === 0
+              ? 'This habit has not been completed yet.'
+              : 'This habit is still behind its target and may need support.',
+        })),
+    [habits]
+  );
 
-  const habitsNeedingRecommendation: RecommendationHabit[] = habits
-    .filter((habit) => habit.currentCount < habit.targetCount)
-    .map((habit) => ({
-      ...habit,
-      completedCount: habit.currentCount,
-      missedCount: Math.max(habit.targetCount - habit.currentCount, 0),
-      reason:
-        habit.currentCount === 0
-          ? 'This habit has not been completed yet.'
-          : 'This habit is still behind its target and may need support.',
-    }));
+  const handleCreateHabit = async (newHabit: {
+    id: string;
+    title: string;
+    subtitle?: string;
+    currentCount: number;
+    targetCount: number;
+    repetition: 'Daily' | 'Weekly' | 'One Time';
+    reminderEnabled: boolean;
+    reminderTime?: string;
+    notificationId?: string | null;
+  }) => {
+    await createHabit({
+      title: newHabit.title,
+      subtitle: newHabit.subtitle,
+      targetCount: newHabit.targetCount,
+      repetition: newHabit.repetition,
+      reminderEnabled: newHabit.reminderEnabled,
+      reminderTime: newHabit.reminderTime,
+      notificationId: newHabit.notificationId,
+    });
+  };
 
   const openRecommendationPrompt = (habit: RecommendationHabit) => {
     setSelectedRecommendationHabit(habit);
@@ -95,10 +77,26 @@ export default function MainBody() {
     setSelectedRecommendationHabit(null);
   };
 
+  const openHabitSheet = () => {
+    bottomSheetRef.current?.snapToIndex(1);
+  };
+
+  const closeHabitSheet = () => {
+    bottomSheetRef.current?.close();
+  };
+
   const renderActivePage = () => {
+    if (loading) {
+      return <ActivityIndicator size="large" color={COLORS.teal} />;
+    }
+
+    if (error) {
+      return <Text style={styles.errorText}>{error}</Text>;
+    }
+
     switch (activeTab) {
       case 'Habits':
-        return <HabitsPage habits={habits} setHabits={setHabits} />;
+        return <HabitsPage habits={habits} />;
       case 'Dailies':
         return <DailiesPage />;
       case 'To Do’s':
@@ -106,24 +104,16 @@ export default function MainBody() {
       case 'Rewards':
         return <RewardsPage />;
       case 'Recommendations':
-     return (
-        <RecommendationsPage
-          habits={habitsNeedingRecommendation}
-          onHabitPress={openRecommendationPrompt}
-          onExitPress={() => setActiveTab('Dailies')}
-        />
-           );
+        return (
+          <RecommendationsPage
+            habits={habitsNeedingRecommendation}
+            onHabitPress={openRecommendationPrompt}
+            onExitPress={() => setActiveTab('Dailies')}
+          />
+        );
       default:
         return <DailiesPage />;
     }
-  };
-
-  const openHabitSheet = () => {
-    bottomSheetRef.current?.snapToIndex(1);
-  };
-
-  const closeHabitSheet = () => {
-    bottomSheetRef.current?.close();
   };
 
   return (
@@ -153,10 +143,10 @@ export default function MainBody() {
         habit={selectedRecommendationHabit}
         onClose={closeRecommendationPrompt}
         onReject={closeRecommendationPrompt}
-        onAccept={(habit) => {
-         closeRecommendationPrompt();
-  }}
-/>
+        onAccept={() => {
+          closeRecommendationPrompt();
+        }}
+      />
     </View>
   );
 }
@@ -171,5 +161,10 @@ const styles = StyleSheet.create({
     flex: 1,
     marginTop: 10,
     paddingBottom: 125,
+    justifyContent: 'center',
+  },
+  errorText: {
+    color: 'white',
+    textAlign: 'center',
   },
 });

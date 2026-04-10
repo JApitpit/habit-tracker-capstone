@@ -1,9 +1,16 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import BottomSheet from '@gorhom/bottom-sheet';
+
 import HabitItem from '../TabItems/HabitItems';
 import TaskDetailsPrompt from '../TaskDetailsPrompt';
 import type { Habit } from '../MainBody';
+import {
+  deleteHabit,
+  toggleHabitComplete,
+  updateHabitDetails,
+  updateHabitProgress,
+} from '../../../../Backend/services/habitService';
 
 type HabitSaveData = {
   title: string;
@@ -20,10 +27,9 @@ type HabitSaveData = {
 
 type HabitsPageProps = {
   habits: Habit[];
-  setHabits: React.Dispatch<React.SetStateAction<Habit[]>>;
 };
 
-export default function HabitsPage({ habits, setHabits }: HabitsPageProps) {
+export default function HabitsPage({ habits }: HabitsPageProps) {
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null);
   const detailsSheetRef = useRef<BottomSheet>(null);
 
@@ -32,37 +38,16 @@ export default function HabitsPage({ habits, setHabits }: HabitsPageProps) {
     [habits, selectedHabitId]
   );
 
-  const increment = (id: string) => {
-    setHabits((prev) =>
-      prev.map((h) =>
-        h.id === id
-          ? { ...h, currentCount: Math.min(h.currentCount + 1, h.targetCount) }
-          : h
-      )
-    );
+  const increment = async (habit: Habit) => {
+    await updateHabitProgress(habit.id, habit.currentCount + 1);
   };
 
-  const decrement = (id: string) => {
-    setHabits((prev) =>
-      prev.map((h) =>
-        h.id === id
-          ? { ...h, currentCount: Math.max(h.currentCount - 1, 0) }
-          : h
-      )
-    );
+  const decrement = async (habit: Habit) => {
+    await updateHabitProgress(habit.id, habit.currentCount - 1);
   };
 
-  const toggleComplete = (id: string) => {
-    setHabits((prev) =>
-      prev.map((h) =>
-        h.id === id
-          ? {
-              ...h,
-              currentCount: h.currentCount >= h.targetCount ? 0 : h.targetCount,
-            }
-          : h
-      )
-    );
+  const toggleComplete = async (id: string) => {
+    await toggleHabitComplete(id);
   };
 
   const openDetails = (id: string) => {
@@ -76,36 +61,29 @@ export default function HabitsPage({ habits, setHabits }: HabitsPageProps) {
     detailsSheetRef.current?.close();
   };
 
-  const handleSaveHabit = (updated: HabitSaveData) => {
+  const handleSaveHabit = async (updated: HabitSaveData) => {
     if (!selectedHabitId) return;
 
-    setHabits((prev) =>
-      prev.map((habit) =>
-        habit.id === selectedHabitId
-          ? {
-              ...habit,
-              title: updated.title,
-              subtitle: updated.subtitle,
-              repetition: updated.repetition ?? habit.repetition,
-              targetCount: updated.targetCount,
-              currentCount: Math.min(updated.currentCount, updated.targetCount),
-              reminderEnabled: updated.reminderEnabled,
-              reminderTime: updated.reminderEnabled
-                ? updated.reminderTime || ''
-                : '',
-              notificationId: updated.reminderEnabled
-                ? updated.notificationId ?? null
-                : null,
-            }
-          : habit
-      )
-    );
+    await updateHabitDetails(selectedHabitId, {
+      title: updated.title,
+      subtitle: updated.subtitle,
+      repetition: updated.repetition,
+      targetCount: updated.targetCount,
+      reminderEnabled: updated.reminderEnabled,
+      reminderTime: updated.reminderEnabled ? updated.reminderTime || '' : '',
+      notificationId: updated.reminderEnabled
+        ? updated.notificationId ?? null
+        : null,
+    });
+
+    const safeCurrentCount = Math.min(updated.currentCount, updated.targetCount);
+    await updateHabitProgress(selectedHabitId, safeCurrentCount);
   };
 
-  const handleDeleteHabit = () => {
+  const handleDeleteHabit = async () => {
     if (!selectedHabitId) return;
 
-    setHabits((prev) => prev.filter((habit) => habit.id !== selectedHabitId));
+    await deleteHabit(selectedHabitId);
     detailsSheetRef.current?.close();
     setSelectedHabitId(null);
   };
@@ -124,8 +102,8 @@ export default function HabitsPage({ habits, setHabits }: HabitsPageProps) {
             subtitle={habit.subtitle}
             currentCount={habit.currentCount}
             targetCount={habit.targetCount}
-            onIncrement={() => increment(habit.id)}
-            onDecrement={() => decrement(habit.id)}
+            onIncrement={() => increment(habit)}
+            onDecrement={() => decrement(habit)}
             onToggleComplete={() => toggleComplete(habit.id)}
             onOpenDetails={() => openDetails(habit.id)}
           />
