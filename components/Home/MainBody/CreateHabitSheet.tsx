@@ -13,6 +13,8 @@ import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import { COLORS } from '../../../styles/globalStyles';
+import { geminiModel } from '../../../gemini';
+import { ActivityIndicator } from 'react-native';
 
 type CreateHabitSheetProps = {
   onClose: () => void;
@@ -58,6 +60,8 @@ const CreateHabitSheet = forwardRef<BottomSheet, CreateHabitSheetProps>(
       return date;
     });
     const [showTimePicker, setShowTimePicker] = useState(false);
+
+    const [aiLoading, setAiLoading] = useState(false);
 
     useEffect(() => {
       const setupNotifications = async () => {
@@ -227,6 +231,48 @@ const CreateHabitSheet = forwardRef<BottomSheet, CreateHabitSheetProps>(
       }
     };
 
+    //AI generation code - not fully implemented yet
+    const fillWithAI = async () => {
+      if (!itemName.trim()) {
+        Alert.alert('Enter a name first', 'Type a habit name so AI can fill in the details.');
+        return;
+      }
+
+      setAiLoading(true);
+
+      try {
+        const prompt = `
+          You are a habit coaching assistant. Given the habit name "${itemName.trim()}", return ONLY a JSON object with no markdown, no explanation, just raw JSON.
+
+          {
+            "suggestedName": "a clearer, more specific version of the habit name",
+            "notes": "a short 1-2 sentence motivational tip or description for this habit",
+            "counterAmount": <a sensible integer target, e.g. 8 for water, 1 for reading>,
+            "repetition": "<Daily | Weekly | One Time>"
+          }
+        `;
+
+        const result = await geminiModel.generateContent(prompt);
+        const text = result.response.text();
+
+        const clean = text.replace(/```json|```/g, '').trim();
+        const parsed = JSON.parse(clean);
+
+        if (parsed.suggestedName) setItemName(parsed.suggestedName);
+        if (parsed.notes) setNotes(parsed.notes);
+        if (parsed.counterAmount) setCounterAmount(parsed.counterAmount);
+        if (parsed.repetition && ['Daily', 'Weekly', 'One Time'].includes(parsed.repetition)) {
+          setRepetition(parsed.repetition);
+        }
+
+      } catch (error) {
+        console.log('Gemini error:', error);
+        Alert.alert('AI Error', 'Could not get AI suggestions. Try again.');
+      } finally {
+        setAiLoading(false);
+      }
+      };
+
     return (
       <BottomSheet
         ref={ref}
@@ -301,6 +347,17 @@ const CreateHabitSheet = forwardRef<BottomSheet, CreateHabitSheetProps>(
             placeholderTextColor="#cfcfcf"
             style={styles.input}
           />
+
+          <Pressable
+            style={[styles.aiButton, aiLoading && { opacity: 0.6 }]}
+            onPress={fillWithAI}
+            disabled={aiLoading}>
+            {aiLoading ? (
+              <ActivityIndicator color={COLORS.deepMidnightBlue} />
+            ) : (
+              <Text style={styles.aiButtonText}>✨ Fill with AI</Text>
+            )}
+          </Pressable>
 
           {createType === 'habit' ? (
             <>
@@ -543,6 +600,19 @@ const styles = StyleSheet.create({
   activeButtonText: {
     color: COLORS.deepMidnightBlue,
     fontWeight: '700',
+  },
+
+  aiButton: {
+    backgroundColor: COLORS.teal,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  aiButtonText: {
+    color: COLORS.deepMidnightBlue,
+    fontWeight: '700',
+    fontSize: 15,
   },
 
   counterRow: {
