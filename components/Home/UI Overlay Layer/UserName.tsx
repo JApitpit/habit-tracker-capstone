@@ -1,42 +1,58 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { auth, db } from '../../../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { COLORS } from '../../../styles/globalStyles';
 
 export default function UserName() {
   const [username, setUsername] = useState('User Name');
+  const [level, setLevel] = useState(1);
 
   useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = auth.currentUser;
+    const user = auth.currentUser;
+    if (!user) return;
 
-        if (!user) {
-          return;
-        }
-        const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
+    const userRef = doc(db, 'users', user.uid);
+    const statsRef = doc(db, 'userStats', user.uid);
 
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+    const unsubscribeUser = onSnapshot(
+      userRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
           setUsername(data.username || 'User Name');
-        } else {
-          console.log('No such document!');
         }
-      } 
-      catch (error) {
+      },
+      (error) => {
         console.log('Failed to load username:', error);
       }
-    };
+    );
 
-    loadUser();
+    const unsubscribeStats = onSnapshot(
+      statsRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setLevel(typeof data.level === 'number' ? data.level : 1);
+        } else {
+          setLevel(1);
+        }
+      },
+      (error) => {
+        console.log('Failed to load level:', error);
+      }
+    );
+
+    return () => {
+      unsubscribeUser();
+      unsubscribeStats();
+    };
   }, []);
 
   return (
     <View style={styles.box}>
       <Text style={styles.name}>{username}</Text>
-      <Text style={styles.level}>Level 1</Text>
+      <Text style={styles.level}>Level {level}</Text>
     </View>
   );
 }

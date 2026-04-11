@@ -1,24 +1,86 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, StyleSheet, Text } from 'react-native';
 import { COLORS } from '../../../styles/globalStyles';
 import { Ionicons } from '@expo/vector-icons';
+import { auth, db } from '../../../firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+
+type UserStats = {
+  level: number;
+  currentLevelXp: number;
+  xpToNextLevel: number;
+};
 
 export default function ProgressBars() {
+  const [stats, setStats] = useState<UserStats>({
+    level: 1,
+    currentLevelXp: 0,
+    xpToNextLevel: 100,
+  });
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const statsRef = doc(db, 'userStats', user.uid);
+
+    const unsubscribe = onSnapshot(statsRef, (snap) => {
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+
+      setStats({
+        level: data.level ?? 1,
+        currentLevelXp: data.currentLevelXp ?? 0,
+        xpToNextLevel: data.xpToNextLevel ?? 100,
+      });
+    });
+
+    return unsubscribe;
+  }, []);
+
+  const xpPercent = useMemo(() => {
+    if (stats.xpToNextLevel <= 0) return 0;
+    return Math.min(
+      100,
+      (stats.currentLevelXp / stats.xpToNextLevel) * 100
+    );
+  }, [stats]);
+
+  const maxHp = useMemo(() => {
+    return Math.round(100 * Math.pow(1.2, stats.level - 1));
+  }, [stats.level]);
+
+  const currentHp = maxHp;
+
+  const hpPercent = 100;
+
   return (
     <View style={styles.container}>
-
-      <View style={styles.row}>
-        <View style={styles.barBackground}>
-          <View style={[styles.topBarFill, { width: '78%' }]} />
+      <View>
+        <View style={styles.row}>
+          <View style={styles.barBackground}>
+            <View style={[styles.topBarFill, { width: `${hpPercent}%` }]} />
+          </View>
+          <Ionicons name="heart" size={14} color={COLORS.vividOrange} />
         </View>
-        <Ionicons name="heart" size={14} color={COLORS.vividOrange} />
+
+        <Text style={styles.text}>
+          [{currentHp}/{maxHp}]
+        </Text>
       </View>
 
-      <View style={styles.row}>
-        <View style={styles.barBackground}>
-          <View style={[styles.bottomBarFill, { width: '55%' }]} />
+      <View>
+        <View style={styles.row}>
+          <View style={styles.barBackground}>
+            <View style={[styles.bottomBarFill, { width: `${xpPercent}%` }]} />
+          </View>
+          <Ionicons name="star" size={14} color={COLORS.vividYellow} />
         </View>
-        <Ionicons name="star" size={14} color={COLORS.vividYellow} />
+
+        <Text style={styles.text}>
+          [{stats.currentLevelXp}/{stats.xpToNextLevel}]
+        </Text>
       </View>
 
     </View>
@@ -29,7 +91,7 @@ const styles = StyleSheet.create({
   container: {
     width: 160,
     gap: 8,
-    height: 40,
+    height: 2, 
   },
 
   row: {
@@ -58,5 +120,13 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: COLORS.vividYellow,
     borderRadius: 999,
+  },
+
+  text: {
+    fontSize: 6,
+    fontWeight: '600',
+    color: COLORS.white,
+    textAlign: 'center',
+    marginTop: 2,
   },
 });

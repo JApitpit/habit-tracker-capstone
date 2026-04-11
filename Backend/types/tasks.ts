@@ -34,6 +34,12 @@ export type HabitDoc = {
   xp: number;
   bonusXpEligible: boolean;
 
+  xpBase: number;
+  xpPoolMax: number;
+  xpPoolRemaining: number;
+  xpEarnedThisCycle: number;
+  completedThisCycle: boolean;
+
   archived: boolean;
 };
 
@@ -56,6 +62,10 @@ export type UpdateHabitInput = {
   reminderTime?: string;
   notificationId?: string | null;
   archived?: boolean;
+};
+
+export type UpdateProgressOptions = {
+  awardXp?: boolean;
 };
 
 export type HabitHistoryDoc = {
@@ -86,8 +96,27 @@ export type DailyAssignmentDoc = {
 
 export type UserStatsDoc = {
   userId: string;
+
   totalXp: number;
   level: number;
+  currentLevelXp: number;
+  xpToNextLevel: number;
+
+  currentStreak: number;
   longestStreak: number;
+
+  lastProgressAt: string | null;
+
+  boosterActive: boolean;
+  boosterBonus: number;
+  boosterActivatedAt: string | null;
+  boosterNotifiedAt: string | null;
+
+  dailyXpDate: string | null;
+  dailyXpCompletions: number;
+
+  weeklyXpWeekKey: string | null;
+  weeklyXpCompletions: number;
+
   updatedAt: string;
 };

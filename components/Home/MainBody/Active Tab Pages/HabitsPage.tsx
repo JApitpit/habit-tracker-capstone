@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import BottomSheet from '@gorhom/bottom-sheet';
 
@@ -6,6 +6,7 @@ import HabitItem from '../TabItems/HabitItems';
 import TaskDetailsPrompt from '../TaskDetailsPrompt';
 import type { Habit } from '../MainBody';
 import {
+  decrementHabitProgressFast,
   deleteHabit,
   toggleHabitComplete,
   updateHabitDetails,
@@ -31,23 +32,156 @@ type HabitsPageProps = {
 
 export default function HabitsPage({ habits }: HabitsPageProps) {
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null);
+  const [busyHabitId, setBusyHabitId] = useState<string | null>(null);
+  const [localCounts, setLocalCounts] = useState<Record<string, number>>({});
+  const [xpPopupByHabit, setXpPopupByHabit] = useState<Record<string, number>>({});
   const detailsSheetRef = useRef<BottomSheet>(null);
 
-  const selectedHabit = useMemo(
-    () => habits.find((habit) => habit.id === selectedHabitId) ?? null,
-    [habits, selectedHabitId]
-  );
+  useEffect(() => {
+    setLocalCounts((prev) => {
+      const next: Record<string, number> = {};
+
+      for (const habit of habits) {
+        next[habit.id] = prev[habit.id] ?? habit.currentCount;
+      }
+
+      return next;
+    });
+  }, [habits]);
+
+  const getDisplayedCount = (habit: Habit) => {
+    return localCounts[habit.id] ?? habit.currentCount;
+  };
+
+  const selectedHabit = useMemo(() => {
+    const baseHabit = habits.find((habit) => habit.id === selectedHabitId) ?? null;
+    if (!baseHabit) return null;
+
+    return {
+      ...baseHabit,
+      currentCount: getDisplayedCount(baseHabit),
+    };
+  }, [habits, selectedHabitId, localCounts]);
+
+  const getXpLabel = (habit: Habit) => {
+    const xpBase =
+      typeof (habit as any).xpBase === 'number'
+        ? (habit as any).xpBase
+        : typeof (habit as any).xp === 'number'
+        ? (habit as any).xp
+        : 0;
+
+    return `+${xpBase} XP`;
+  };
+
+  const showXpPopup = (habitId: string, amount: number) => {
+    setXpPopupByHabit((prev) => ({ ...prev, [habitId]: amount }));
+
+    setTimeout(() => {
+      setXpPopupByHabit((prev) => ({ ...prev, [habitId]: 0 }));
+    }, 900);
+  };
 
   const increment = async (habit: Habit) => {
-    await updateHabitProgress(habit.id, habit.currentCount + 1);
+    if (busyHabitId === habit.id) return;
+
+    const displayedCount = getDisplayedCount(habit);
+    const nextCount = Math.min(displayedCount + 1, habit.targetCount);
+    const willComplete =
+      displayedCount < habit.targetCount && nextCount >= habit.targetCount;
+
+    const xpBase =
+      typeof (habit as any).xpBase === 'number'
+        ? (habit as any).xpBase
+        : typeof (habit as any).xp === 'number'
+        ? (habit as any).xp
+        : 0;
+
+    setLocalCounts((prev) => ({
+      ...prev,
+      [habit.id]: nextCount,
+    }));
+
+    try {
+      setBusyHabitId(habit.id);
+      await updateHabitProgress(habit.id, nextCount, {
+        awardXp: true,
+      });
+
+      if (willComplete && xpBase > 0) {
+        showXpPopup(habit.id, xpBase);
+      }
+    } catch (error) {
+      console.log('Increment failed:', error);
+      setLocalCounts((prev) => ({
+        ...prev,
+        [habit.id]: habit.currentCount,
+      }));
+    } finally {
+      setBusyHabitId(null);
+    }
   };
 
   const decrement = async (habit: Habit) => {
-    await updateHabitProgress(habit.id, habit.currentCount - 1);
+    if (busyHabitId === habit.id) return;
+
+    const displayedCount = getDisplayedCount(habit);
+    const nextCount = Math.max(displayedCount - 1, 0);
+
+    setLocalCounts((prev) => ({
+      ...prev,
+      [habit.id]: nextCount,
+    }));
+
+    try {
+      setBusyHabitId(habit.id);
+      await decrementHabitProgressFast(habit.id, nextCount);
+    } catch (error) {
+      console.log('Decrement failed:', error);
+      setLocalCounts((prev) => ({
+        ...prev,
+        [habit.id]: habit.currentCount,
+      }));
+    } finally {
+      setBusyHabitId(null);
+    }
   };
 
-  const toggleComplete = async (id: string) => {
-    await toggleHabitComplete(id);
+  const toggleComplete = async (habit: Habit) => {
+    if (busyHabitId === habit.id) return;
+
+    const displayedCount = getDisplayedCount(habit);
+    const isCompleted = displayedCount >= habit.targetCount;
+    const nextCount = isCompleted ? 0 : habit.targetCount;
+
+    const xpBase =
+      typeof (habit as any).xpBase === 'number'
+        ? (habit as any).xpBase
+        : typeof (habit as any).xp === 'number'
+        ? (habit as any).xp
+        : 0;
+
+    setLocalCounts((prev) => ({
+      ...prev,
+      [habit.id]: nextCount,
+    }));
+
+    try {
+      setBusyHabitId(habit.id);
+      await toggleHabitComplete(habit.id);
+
+      if (!isCompleted && xpBase > 0) {
+        showXpPopup(habit.id, xpBase);
+      }
+    } catch (error) {
+      console.log('Toggle complete failed:', error);
+      setLocalCounts((prev) => ({
+        ...prev,
+        [habit.id]: habit.currentCount,
+      }));
+    } finally {
+      setBusyHabitId(null);
+    }
   };
 
   const openDetails = (id: string) => {
@@ -62,30 +196,65 @@ export default function HabitsPage({ habits }: HabitsPageProps) {
   };
 
   const handleSaveHabit = async (updated: HabitSaveData) => {
-    if (!selectedHabitId) return;
+    if (!selectedHabitId || busyHabitId) return;
 
-    await updateHabitDetails(selectedHabitId, {
-      title: updated.title,
-      subtitle: updated.subtitle,
-      repetition: updated.repetition,
-      targetCount: updated.targetCount,
-      reminderEnabled: updated.reminderEnabled,
-      reminderTime: updated.reminderEnabled ? updated.reminderTime || '' : '',
-      notificationId: updated.reminderEnabled
-        ? updated.notificationId ?? null
-        : null,
-    });
+    const existingHabit = habits.find((habit) => habit.id === selectedHabitId);
+    if (!existingHabit) return;
 
     const safeCurrentCount = Math.min(updated.currentCount, updated.targetCount);
-    await updateHabitProgress(selectedHabitId, safeCurrentCount);
+
+    setLocalCounts((prev) => ({
+      ...prev,
+      [selectedHabitId]: safeCurrentCount,
+    }));
+
+    try {
+      setBusyHabitId(selectedHabitId);
+
+      await updateHabitDetails(selectedHabitId, {
+        title: updated.title,
+        subtitle: updated.subtitle,
+        repetition: updated.repetition,
+        targetCount: updated.targetCount,
+        reminderEnabled: updated.reminderEnabled,
+        reminderTime: updated.reminderEnabled ? updated.reminderTime || '' : '',
+        notificationId: updated.reminderEnabled
+          ? updated.notificationId ?? null
+          : null,
+      });
+
+      await updateHabitProgress(selectedHabitId, safeCurrentCount, {
+        awardXp: false,
+      });
+    } catch (error) {
+      console.log('Save habit failed:', error);
+      setLocalCounts((prev) => ({
+        ...prev,
+        [selectedHabitId]: existingHabit.currentCount,
+      }));
+    } finally {
+      setBusyHabitId(null);
+    }
   };
 
   const handleDeleteHabit = async () => {
-    if (!selectedHabitId) return;
+    if (!selectedHabitId || busyHabitId) return;
 
-    await deleteHabit(selectedHabitId);
-    detailsSheetRef.current?.close();
-    setSelectedHabitId(null);
+    try {
+      setBusyHabitId(selectedHabitId);
+      await deleteHabit(selectedHabitId);
+      detailsSheetRef.current?.close();
+      setSelectedHabitId(null);
+      setLocalCounts((prev) => {
+        const next = { ...prev };
+        delete next[selectedHabitId];
+        return next;
+      });
+    } catch (error) {
+      console.log('Delete habit failed:', error);
+    } finally {
+      setBusyHabitId(null);
+    }
   };
 
   return (
@@ -100,11 +269,14 @@ export default function HabitsPage({ habits }: HabitsPageProps) {
             key={habit.id}
             title={habit.title}
             subtitle={habit.subtitle}
-            currentCount={habit.currentCount}
+            currentCount={getDisplayedCount(habit)}
             targetCount={habit.targetCount}
+            disabled={busyHabitId === habit.id}
+            xpLabel={getXpLabel(habit)}
+            xpGain={xpPopupByHabit[habit.id] ?? 0}
             onIncrement={() => increment(habit)}
             onDecrement={() => decrement(habit)}
-            onToggleComplete={() => toggleComplete(habit.id)}
+            onToggleComplete={() => toggleComplete(habit)}
             onOpenDetails={() => openDetails(habit.id)}
           />
         ))}

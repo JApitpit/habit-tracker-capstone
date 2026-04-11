@@ -1,6 +1,13 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Animated,
+} from 'react-native';
 import { COLORS } from '../../../../styles/globalStyles';
+import { Ionicons } from '@expo/vector-icons';
 
 type HabitItemProps = {
   title: string;
@@ -11,6 +18,10 @@ type HabitItemProps = {
   onDecrement: () => void;
   onToggleComplete: () => void;
   onOpenDetails: () => void;
+  disabled?: boolean;
+
+  xpLabel?: string;
+  xpGain?: number;
 };
 
 export default function HabitItem({
@@ -22,6 +33,9 @@ export default function HabitItem({
   onDecrement,
   onToggleComplete,
   onOpenDetails,
+  disabled = false,
+  xpLabel = '+0 XP',
+  xpGain = 0,
 }: HabitItemProps) {
   const safeTarget = Math.max(1, targetCount);
   const safeCurrent = Math.max(0, Math.min(currentCount, safeTarget));
@@ -29,10 +43,67 @@ export default function HabitItem({
   const isSingleCheckHabit = safeTarget === 1;
   const isCompleted = safeCurrent >= safeTarget;
 
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const riseAnim = useRef(new Animated.Value(8)).current;
+
+  useEffect(() => {
+    if (!xpGain || xpGain <= 0) return;
+
+    fadeAnim.setValue(0);
+    riseAnim.setValue(8);
+
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(riseAnim, {
+        toValue: -14,
+        duration: 700,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 260,
+        delay: 550,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [xpGain, fadeAnim, riseAnim]);
+
   return (
-    <Pressable style={styles.card} onPress={onOpenDetails}>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.subtitle}>{subtitle || ''}</Text>
+    <Pressable
+      style={[styles.card, disabled && styles.cardDisabled]}
+      onPress={onOpenDetails}
+      disabled={disabled}
+    >
+      <View style={styles.topRow}>
+        <View style={styles.textWrap}>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>{subtitle || ''}</Text>
+        </View>
+
+        <View style={styles.xpBadge}>
+          <Ionicons name="star" size={12} color={COLORS.vividYellow} />
+          <Text style={styles.xpBadgeText}>{xpLabel}</Text>
+        </View>
+      </View>
+
+      {xpGain > 0 && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.xpPopup,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: riseAnim }],
+            },
+          ]}
+        >
+          <Text style={styles.xpPopupText}>+{xpGain} XP</Text>
+        </Animated.View>
+      )}
 
       <View style={styles.progressSection}>
         <View style={styles.progressBarBackground}>
@@ -55,7 +126,9 @@ export default function HabitItem({
           style={[
             styles.checkButton,
             isCompleted ? styles.checkButtonCompleted : styles.checkButtonIncomplete,
+            disabled && styles.buttonDisabled,
           ]}
+          disabled={disabled}
           onPress={(e) => {
             e.stopPropagation();
             onToggleComplete();
@@ -73,7 +146,8 @@ export default function HabitItem({
       ) : (
         <View style={styles.actions}>
           <Pressable
-            style={styles.btn}
+            style={[styles.btn, disabled && styles.buttonDisabled]}
+            disabled={disabled}
             onPress={(e) => {
               e.stopPropagation();
               onDecrement();
@@ -83,7 +157,8 @@ export default function HabitItem({
           </Pressable>
 
           <Pressable
-            style={styles.btn}
+            style={[styles.btn, disabled && styles.buttonDisabled]}
+            disabled={disabled}
             onPress={(e) => {
               e.stopPropagation();
               onIncrement();
@@ -102,6 +177,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#d8cf9d',
     borderRadius: 14,
     padding: 14,
+    position: 'relative',
+    overflow: 'visible',
+  },
+
+  cardDisabled: {
+    opacity: 0.75,
+  },
+
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+
+  textWrap: {
+    flex: 1,
   },
 
   title: {
@@ -115,6 +207,39 @@ const styles = StyleSheet.create({
     color: COLORS.vividOrange,
     marginBottom: 12,
     fontSize: 13,
+  },
+
+  xpBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.deepMidnightBlue,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+
+  xpBadgeText: {
+    color: COLORS.sunshineYellow,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  xpPopup: {
+    position: 'absolute',
+    right: 14,
+    top: 38,
+    backgroundColor: COLORS.deepMidnightBlue,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    zIndex: 5,
+  },
+
+  xpPopupText: {
+    color: COLORS.sunshineYellow,
+    fontWeight: '800',
+    fontSize: 12,
   },
 
   progressSection: {
@@ -160,6 +285,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
     borderRadius: 8,
+  },
+
+  buttonDisabled: {
+    opacity: 0.55,
   },
 
   btnText: {
