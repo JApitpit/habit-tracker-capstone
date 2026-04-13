@@ -24,11 +24,14 @@ import type {
   UpdateProgressOptions,
   UserStatsDoc,
 } from '../types/tasks';
+import type { MoneyTransactionDoc, UserMoneyDoc } from '../types/money';
 
 const HABITS = 'habits';
 const HABIT_HISTORY = 'habitHistory';
 const DAILY_ASSIGNMENTS = 'dailyAssignments';
 const USER_STATS = 'userStats';
+const USER_MONEY = 'userMoney';
+const MONEY_TRANSACTIONS = 'moneyTransactions';
 
 const LEVEL_GROWTH_RATE = 1.2;
 const STREAK_POST_6_GROWTH_RATE = 1.1;
@@ -36,6 +39,7 @@ const BOOSTER_BONUS = 1.0;
 const INACTIVITY_DAYS_FOR_BOOSTER = 5;
 const DAILY_XP_CAP = 10;
 const WEEKLY_XP_CAP = 7;
+const DAILY_MONEY_CAP = 10;
 
 function nowIso() {
   return new Date().toISOString();
@@ -259,6 +263,45 @@ function createDefaultUserStats(userId: string): UserStatsDoc {
   };
 }
 
+function createDefaultUserMoney(userId: string): UserMoneyDoc {
+  return {
+    userId,
+    balance: 0,
+    totalEarned: 0,
+    totalSpent: 0,
+    dailyMoneyDate: null,
+    dailyMoneyTasks: 0,
+    updatedAt: nowIso(),
+  };
+}
+
+function normalizeMoneyCounters(money: UserMoneyDoc, now: string): UserMoneyDoc {
+  const todayKey = getDateKey(now);
+
+  return {
+    ...money,
+    dailyMoneyDate: money.dailyMoneyDate === todayKey ? money.dailyMoneyDate : todayKey,
+    dailyMoneyTasks: money.dailyMoneyDate === todayKey ? money.dailyMoneyTasks : 0,
+  };
+}
+
+function isMoneyEligibleForTask(money: UserMoneyDoc) {
+  return money.dailyMoneyTasks < DAILY_MONEY_CAP;
+}
+
+function incrementMoneyTaskCounter(money: UserMoneyDoc): UserMoneyDoc {
+  return {
+    ...money,
+    dailyMoneyTasks: money.dailyMoneyTasks + 1,
+  };
+}
+
+function getMoneyForCompletion(repetition: HabitDoc['repetition']) {
+  if (repetition === 'Weekly') return 15;
+  if (repetition === 'One Time') return 20;
+  return 10;
+}
+
 export async function ensureUserStats(userId?: string) {
   const uid = userId ?? getCurrentUserId();
   const ref = doc(db, USER_STATS, uid);
@@ -266,6 +309,16 @@ export async function ensureUserStats(userId?: string) {
 
   if (!snapshot.exists()) {
     await setDoc(ref, createDefaultUserStats(uid));
+  }
+}
+
+export async function ensureUserMoney(userId?: string) {
+  const uid = userId ?? getCurrentUserId();
+  const ref = doc(db, USER_MONEY, uid);
+  const snapshot = await getDoc(ref);
+
+  if (!snapshot.exists()) {
+    await setDoc(ref, createDefaultUserMoney(uid));
   }
 }
 
@@ -328,6 +381,7 @@ export function subscribeToUserStats(
 export async function createHabit(input: CreateHabitInput) {
   const userId = getCurrentUserId();
   await ensureUserStats(userId);
+  await ensureUserMoney(userId);
 
   const habitRef = doc(collection(db, HABITS));
   const createdAt = nowIso();
@@ -409,9 +463,15 @@ export async function updateHabitProgress(
   const userId = getCurrentUserId();
   const ref = doc(db, HABITS, habitId);
   const statsRef = doc(db, USER_STATS, userId);
+  const moneyRef = doc(db, USER_MONEY, userId);
+  const moneyTransactionRef = doc(collection(db, MONEY_TRANSACTIONS));
 
   await runTransaction(db, async (tx) => {
-    const [snap, statsSnap] = await Promise.all([tx.get(ref), tx.get(statsRef)]);
+    const [snap, statsSnap, moneySnap] = await Promise.all([
+      tx.get(ref),
+      tx.get(statsRef),
+      tx.get(moneyRef),
+    ]);
 
     if (!snap.exists()) {
       throw new Error('Habit not found.');
@@ -426,6 +486,10 @@ export async function updateHabitProgress(
       ? (statsSnap.data() as UserStatsDoc)
       : createDefaultUserStats(userId);
 
+    const baseMoney = moneySnap.exists()
+      ? (moneySnap.data() as UserMoneyDoc)
+      : createDefaultUserMoney(userId);
+
     const now = nowIso();
     const clamped = clampCount(nextCount, habit.targetCount);
     const becameCompleted =
@@ -434,7 +498,10 @@ export async function updateHabitProgress(
     let nextStats = normalizeCapCounters(baseStats, now);
     nextStats = applyProgressEvent(nextStats, now);
 
+    let nextMoney = normalizeMoneyCounters(baseMoney, now);
+
     let xpAwarded = 0;
+    let coinsAwarded = 0;
 
     if (options.awardXp !== false && becameCompleted) {
       const eligible = isXpEligibleForCompletion(habit.repetition, nextStats);
@@ -444,6 +511,11 @@ export async function updateHabitProgress(
         xpAwarded = Math.round(habit.xp * multiplier);
         nextStats = incrementCapCounter(habit.repetition, nextStats);
         nextStats = applyXpToLevel(nextStats, xpAwarded);
+      }
+
+      if (isMoneyEligibleForTask(nextMoney)) {
+        coinsAwarded = getMoneyForCompletion(habit.repetition);
+        nextMoney = incrementMoneyTaskCounter(nextMoney);
       }
     }
 
@@ -462,6 +534,31 @@ export async function updateHabitProgress(
       },
       { merge: true }
     );
+
+    tx.set(
+      moneyRef,
+      {
+        ...nextMoney,
+        balance: nextMoney.balance + coinsAwarded,
+        totalEarned: nextMoney.totalEarned + coinsAwarded,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    if (coinsAwarded > 0) {
+      const moneyTransaction: MoneyTransactionDoc = {
+        id: moneyTransactionRef.id,
+        userId,
+        type: 'earn',
+        amount: coinsAwarded,
+        reason: `Completed habit: ${habit.title}`,
+        sourceId: habit.id,
+        createdAt: now,
+      };
+
+      tx.set(moneyTransactionRef, moneyTransaction);
+    }
   });
 }
 
@@ -469,9 +566,15 @@ export async function toggleHabitComplete(habitId: string) {
   const userId = getCurrentUserId();
   const ref = doc(db, HABITS, habitId);
   const statsRef = doc(db, USER_STATS, userId);
+  const moneyRef = doc(db, USER_MONEY, userId);
+  const moneyTransactionRef = doc(collection(db, MONEY_TRANSACTIONS));
 
   await runTransaction(db, async (tx) => {
-    const [snap, statsSnap] = await Promise.all([tx.get(ref), tx.get(statsRef)]);
+    const [snap, statsSnap, moneySnap] = await Promise.all([
+      tx.get(ref),
+      tx.get(statsRef),
+      tx.get(moneyRef),
+    ]);
 
     if (!snap.exists()) {
       throw new Error('Habit not found.');
@@ -486,6 +589,10 @@ export async function toggleHabitComplete(habitId: string) {
       ? (statsSnap.data() as UserStatsDoc)
       : createDefaultUserStats(userId);
 
+    const baseMoney = moneySnap.exists()
+      ? (moneySnap.data() as UserMoneyDoc)
+      : createDefaultUserMoney(userId);
+
     const now = nowIso();
     const isCompleted = habit.currentCount >= habit.targetCount;
     const nextCount = isCompleted ? 0 : habit.targetCount;
@@ -493,7 +600,10 @@ export async function toggleHabitComplete(habitId: string) {
     let nextStats = normalizeCapCounters(baseStats, now);
     nextStats = applyProgressEvent(nextStats, now);
 
+    let nextMoney = normalizeMoneyCounters(baseMoney, now);
+
     let xpAwarded = 0;
+    let coinsAwarded = 0;
 
     if (!isCompleted) {
       const eligible = isXpEligibleForCompletion(habit.repetition, nextStats);
@@ -503,6 +613,11 @@ export async function toggleHabitComplete(habitId: string) {
         xpAwarded = Math.round(habit.xp * multiplier);
         nextStats = incrementCapCounter(habit.repetition, nextStats);
         nextStats = applyXpToLevel(nextStats, xpAwarded);
+      }
+
+      if (isMoneyEligibleForTask(nextMoney)) {
+        coinsAwarded = getMoneyForCompletion(habit.repetition);
+        nextMoney = incrementMoneyTaskCounter(nextMoney);
       }
     }
 
@@ -521,6 +636,31 @@ export async function toggleHabitComplete(habitId: string) {
       },
       { merge: true }
     );
+
+    tx.set(
+      moneyRef,
+      {
+        ...nextMoney,
+        balance: nextMoney.balance + coinsAwarded,
+        totalEarned: nextMoney.totalEarned + coinsAwarded,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    if (coinsAwarded > 0) {
+      const moneyTransaction: MoneyTransactionDoc = {
+        id: moneyTransactionRef.id,
+        userId,
+        type: 'earn',
+        amount: coinsAwarded,
+        reason: `Completed habit: ${habit.title}`,
+        sourceId: habit.id,
+        createdAt: now,
+      };
+
+      tx.set(moneyTransactionRef, moneyTransaction);
+    }
   });
 }
 
@@ -588,6 +728,7 @@ export async function deleteHabit(habitId: string) {
 export async function processHabitResets() {
   const userId = getCurrentUserId();
   await ensureUserStats(userId);
+  await ensureUserMoney(userId);
 
   const habitsQuery = query(
     collection(db, HABITS),
