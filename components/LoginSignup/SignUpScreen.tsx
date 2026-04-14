@@ -8,6 +8,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import { ensureUserHp } from '../../Backend/services/healthService';
 import { COLORS, globalStyles } from '../../styles/globalStyles';
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../../firebase";
@@ -66,6 +67,8 @@ export default function SignUpScreen({ onGoToLogin }: Props) {
         email: email.trim().toLowerCase(),
         createdAt: new Date(),
       });
+
+      await ensureUserHp(uid); // Initialize HP for the new user
     
       Alert.alert('Success', 'Account created! Please log in.');
       onGoToLogin();

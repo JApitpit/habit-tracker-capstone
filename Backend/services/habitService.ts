@@ -25,6 +25,7 @@ import type {
   UserStatsDoc,
 } from '../types/tasks';
 import type { MoneyTransactionDoc, UserMoneyDoc } from '../types/money';
+import { applyHpLoss, applyHpRegen, ensureUserHp } from './healthService';
 
 const HABITS = 'habits';
 const HABIT_HISTORY = 'habitHistory';
@@ -729,6 +730,7 @@ export async function processHabitResets() {
   const userId = getCurrentUserId();
   await ensureUserStats(userId);
   await ensureUserMoney(userId);
+  await ensureUserHp(userId);
 
   const habitsQuery = query(
     collection(db, HABITS),
@@ -819,6 +821,14 @@ export async function processHabitResets() {
         { merge: true }
       );
     });
+
+    if (result === 'missed') {
+    await applyHpLoss('missed', habit.id, habit.title, userId);
+    } else if (result === 'partial') {
+    await applyHpLoss('partial', habit.id, habit.title, userId);
+    } else if (result === 'completed') {
+    await applyHpRegen(habit.id, habit.title, userId);
+  }
   }
 }
 
